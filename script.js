@@ -1,4 +1,4 @@
-const DEFAULT_GA_ID = "G-XXXXXXXXXX";
+const DEFAULT_GA_ID = "G-RSBYCXJ2P9";
 const DEFAULT_CLARITY_ID = "xxxxxxxxxx";
 const analyticsConfig = window.TECHNOVA_ANALYTICS || {};
 const GA_MEASUREMENT_ID = (analyticsConfig.gaMeasurementId || "").trim();
