@@ -1,4 +1,4 @@
 window.TECHNOVA_ANALYTICS = {
-  gaMeasurementId: "G-XXXXXXXXXX",
+  gaMeasurementId: "G-RSBYCXJ2P9",
   clarityProjectId: "xxxxxxxxxx"
 };
