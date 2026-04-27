@@ -1,20 +1,30 @@
-const GA_MEASUREMENT_ID = "G-XXXXXXXXXX";
-const CLARITY_PROJECT_ID = "xxxxxxxxxx";
+const DEFAULT_GA_ID = "G-XXXXXXXXXX";
+const DEFAULT_CLARITY_ID = "xxxxxxxxxx";
+const analyticsConfig = window.TECHNOVA_ANALYTICS || {};
+const GA_MEASUREMENT_ID = (analyticsConfig.gaMeasurementId || "").trim();
+const CLARITY_PROJECT_ID = (analyticsConfig.clarityProjectId || "").trim();
 
-if (GA_MEASUREMENT_ID !== "G-XXXXXXXXXX") {
+let gaReady = false;
+let clarityReady = false;
+
+function initGa4() {
+  if (!GA_MEASUREMENT_ID || GA_MEASUREMENT_ID === DEFAULT_GA_ID) return;
   const ga = document.createElement("script");
   ga.async = true;
   ga.src = "https://www.googletagmanager.com/gtag/js?id=" + GA_MEASUREMENT_ID;
   document.head.appendChild(ga);
+
   window.dataLayer = window.dataLayer || [];
   window.gtag = function gtag() {
     window.dataLayer.push(arguments);
   };
   window.gtag("js", new Date());
   window.gtag("config", GA_MEASUREMENT_ID);
+  gaReady = true;
 }
 
-if (CLARITY_PROJECT_ID !== "xxxxxxxxxx") {
+function initClarity() {
+  if (!CLARITY_PROJECT_ID || CLARITY_PROJECT_ID === DEFAULT_CLARITY_ID) return;
   (function (c, l, a, r, i, t, y) {
     c[a] = c[a] || function () {
       (c[a].q = c[a].q || []).push(arguments);
@@ -25,6 +35,22 @@ if (CLARITY_PROJECT_ID !== "xxxxxxxxxx") {
     y = l.getElementsByTagName(r)[0];
     y.parentNode.insertBefore(t, y);
   })(window, document, "clarity", "script", CLARITY_PROJECT_ID);
+  clarityReady = true;
+}
+
+function trackEvent(eventName, params) {
+  if (gaReady && typeof window.gtag === "function") {
+    window.gtag("event", eventName, params || {});
+  }
+  if (clarityReady && typeof window.clarity === "function") {
+    window.clarity("event", eventName);
+  }
+}
+
+initGa4();
+initClarity();
+if (!gaReady || !clarityReady) {
+  console.warn("Uzupelnij analytics-config.js, aby aktywowac GA4 i Clarity.");
 }
 
 const nav = document.querySelector("#main-nav");
@@ -34,6 +60,7 @@ if (nav && menuToggle) {
   menuToggle.addEventListener("click", () => {
     const isOpen = nav.classList.toggle("is-open");
     menuToggle.setAttribute("aria-expanded", String(isOpen));
+    trackEvent("menu_toggle", { open: isOpen });
   });
 }
 
@@ -55,18 +82,21 @@ if (nav && page) {
   }
 }
 
-const observer = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-      }
-    });
-  },
-  { threshold: 0.12 }
-);
-
-document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+if ("IntersectionObserver" in window) {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+        }
+      });
+    },
+    { threshold: 0.12 }
+  );
+  document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+} else {
+  document.querySelectorAll(".reveal").forEach((el) => el.classList.add("is-visible"));
+}
 
 const yearTarget = document.querySelector("[data-year]");
 if (yearTarget) {
@@ -83,7 +113,12 @@ const sequence = [
 ];
 
 function getSignup() {
-  const raw = localStorage.getItem(NEWS_KEY);
+  let raw = null;
+  try {
+    raw = localStorage.getItem(NEWS_KEY);
+  } catch {
+    raw = null;
+  }
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -93,7 +128,13 @@ function getSignup() {
 }
 
 function getTimeShiftHours() {
-  const value = Number(localStorage.getItem(SHIFT_KEY) || "0");
+  let rawValue = "0";
+  try {
+    rawValue = localStorage.getItem(SHIFT_KEY) || "0";
+  } catch {
+    rawValue = "0";
+  }
+  const value = Number(rawValue);
   return Number.isFinite(value) ? value : 0;
 }
 
@@ -136,14 +177,22 @@ document.querySelectorAll("[data-newsletter-form]").forEach((form) => {
     if (!email) return;
 
     const payload = { email, signedAt: new Date().toISOString() };
-    localStorage.setItem(NEWS_KEY, JSON.stringify(payload));
-    localStorage.setItem(SHIFT_KEY, "0");
+    try {
+      localStorage.setItem(NEWS_KEY, JSON.stringify(payload));
+      localStorage.setItem(SHIFT_KEY, "0");
+    } catch {
+      if (msg) {
+        msg.textContent = "Nie udalo sie zapisac danych lokalnie. Sprawdz ustawienia przegladarki.";
+      }
+      return;
+    }
     emailInput.value = "";
 
     if (msg) {
       msg.textContent = "Zapisano. Uruchomiono automatyzacje: welcome, poradnik, oferta.";
     }
 
+    trackEvent("newsletter_signup", { form: "newsletter", page });
     renderAutomation();
   });
 });
@@ -153,7 +202,12 @@ document.querySelectorAll("[data-automation-advance]").forEach((btn) => {
     const signup = getSignup();
     if (!signup) return;
     const shift = getTimeShiftHours() + 48;
-    localStorage.setItem(SHIFT_KEY, String(shift));
+    try {
+      localStorage.setItem(SHIFT_KEY, String(shift));
+    } catch {
+      return;
+    }
+    trackEvent("automation_advance_48h", { shift_hours: shift, page });
     renderAutomation();
   });
 });
@@ -166,6 +220,7 @@ if (contactForm) {
     if (msg) {
       msg.textContent = "Dziekujemy. Formularz testowy zostal wyslany poprawnie.";
     }
+    trackEvent("contact_form_submit", { form: "contact" });
     contactForm.reset();
   });
 }
